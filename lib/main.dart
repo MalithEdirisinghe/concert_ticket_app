@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'video_fetcher.dart'; // Your existing VideoListScreen import
-import 'qr_code_scanner_screen.dart'; // Import the QR code scanner
 
 void main() {
   runApp(const MyApp());
@@ -28,9 +29,15 @@ class TimePeriodInputScreen extends StatefulWidget {
 }
 
 class _TimePeriodInputScreenState extends State<TimePeriodInputScreen> {
-  final TextEditingController _minuteController = TextEditingController();
-  int _remainingTime = 0; // Countdown time in seconds
-  bool _isCountingDown = false; // Countdown state
+  int _remainingTime = 0;
+  bool _isCountingDown = false;
+  bool _isQRCodeVisible = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPermissions(); // Check permissions on app launch
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,67 +55,19 @@ class _TimePeriodInputScreenState extends State<TimePeriodInputScreen> {
             end: Alignment.bottomCenter,
           ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+        child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // QR Code scanning button
-              ElevatedButton(
-                onPressed: _isCountingDown ? null : _openQRCodeScanner,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 30.0, vertical: 15.0),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10.0),
-                  ),
+              // Display QR code if visible
+              if (_isQRCodeVisible)
+                QrImageView(
+                  data: '5', // QR Code data set to '5' for 5 minutes
+                  version: QrVersions.auto,
+                  size: 200.0,
                 ),
-                child: const Text(
-                  'Scan QR Code',
-                  style: TextStyle(fontSize: 18, color: Colors.white),
-                ),
-              ),
               const SizedBox(height: 30),
-              // Display scanned time
-              TextField(
-                controller: _minuteController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Scanned Minutes',
-                  labelStyle: const TextStyle(color: Colors.blueAccent),
-                  filled: true,
-                  fillColor: Colors.white,
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10.0),
-                    borderSide: const BorderSide(color: Colors.blueAccent),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10.0),
-                    borderSide: const BorderSide(color: Colors.blueAccent),
-                  ),
-                ),
-                enabled: false, // Disable manual input
-              ),
-              const SizedBox(height: 30),
-              // Start Countdown button
-              ElevatedButton(
-                onPressed: _isCountingDown ? null : _startCountdown,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 30.0, vertical: 15.0),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10.0),
-                  ),
-                ),
-                child: const Text(
-                  'Start Countdown',
-                  style: TextStyle(fontSize: 18, color: Colors.white),
-                ),
-              ),
-              const SizedBox(height: 30),
-              // Countdown timer text
+              // Display countdown timer text
               if (_isCountingDown)
                 Text(
                   'Time Remaining: ${_remainingTime ~/ 60}m ${_remainingTime % 60}s',
@@ -133,50 +92,92 @@ class _TimePeriodInputScreenState extends State<TimePeriodInputScreen> {
     );
   }
 
-  // Open QR Code scanner
-  void _openQRCodeScanner() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => QRCodeScannerScreen(
-          onScannedTime: (int scannedTime) {
-            setState(() {
-              _minuteController.text = scannedTime.toString();
-              _remainingTime = scannedTime * 60; // Convert to seconds
-            });
-          },
-        ),
-      ),
+  // Check and request storage permissions
+  Future<void> _checkPermissions() async {
+    if (await Permission.storage.isGranted ||
+        await Permission.manageExternalStorage.isGranted) {
+      _generateAndShowQRCode(); // If already granted, show QR code
+    } else {
+      _showPermissionRequestDialog(); // Otherwise, request permission
+    }
+  }
+
+  // Show a dialog to request permissions
+  void _showPermissionRequestDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Permissions Required'),
+          content: const Text(
+            'This app needs access to your storage to fetch videos and apply effects.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(context); // Close the dialog
+                // Request permissions
+                Map<Permission, PermissionStatus> statuses = await [
+                  Permission.storage,
+                  Permission.manageExternalStorage,
+                ].request();
+
+                // Check if the permissions are granted
+                if (statuses[Permission.storage]?.isGranted == true ||
+                    statuses[Permission.manageExternalStorage]?.isGranted ==
+                        true) {
+                  _generateAndShowQRCode(); // Proceed if permissions are granted
+                } else {
+                  // Show message if permissions are denied
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Storage permission is required to access videos.',
+                      ),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Allow'),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  // Start the countdown
-  void _startCountdown() {
-    final int minutes = int.tryParse(_minuteController.text) ?? 0;
-    if (minutes > 0) {
+  // Generate QR Code and show it for 5 seconds
+  void _generateAndShowQRCode() {
+    setState(() {
+      _isQRCodeVisible = true;
+    });
+
+    // Set the countdown time to 5 minutes
+    _remainingTime = 5 * 60;
+
+    // Show QR code for 5 seconds, then start countdown and navigate
+    Future.delayed(const Duration(seconds: 5), () {
       setState(() {
-        _remainingTime = minutes * 60; // Convert to seconds
-        _isCountingDown = true; // Set countdown state
+        _isQRCodeVisible = false;
       });
 
-      // Navigate to VideoListScreen immediately
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => VideoListScreen(
-            minutes: minutes,
-            onCountdownEnd: _endCountdown,
-          ),
-        ),
-      );
+      // Navigate to VideoListScreen
+      _navigateToVideoListScreen();
+    });
+  }
 
-      // Start the timer
-      _runCountdownTimer();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid time period')),
-      );
-    }
+  // Navigate to VideoListScreen
+  void _navigateToVideoListScreen() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => VideoListScreen(
+          minutes: 5, // Pass 5 minutes to the VideoListScreen
+          onCountdownEnd: _endCountdown,
+        ),
+      ),
+    );
   }
 
   // Run the countdown timer
