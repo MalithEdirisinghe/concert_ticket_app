@@ -56,9 +56,6 @@ class _VideoListScreenState extends State<VideoListScreen> {
         }
       } else {
         timer.cancel();
-        if (widget.onCountdownEnd != null) {
-          widget.onCountdownEnd!(); // Trigger countdown end callback
-        }
         _showEndAlert(context); // Show alert when countdown ends
       }
     });
@@ -68,6 +65,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
   void _showEndAlert(BuildContext context) {
     showDialog(
       context: context,
+      barrierDismissible: false, // Make dialog non-dismissible
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Concert has ended'),
@@ -77,9 +75,8 @@ class _VideoListScreenState extends State<VideoListScreen> {
                 backgroundColor: Colors.blueAccent, // Button color
               ),
               onPressed: () {
-                Navigator.of(context)
-                  ..pop() // Close alert
-                  ..pop(); // Navigate back to main screen
+                Navigator.of(context).pop(); // Close alert
+                _navigateBackToMain(); // Navigate back to main screen
               },
               child: const Text(
                 'OK',
@@ -90,6 +87,11 @@ class _VideoListScreenState extends State<VideoListScreen> {
         );
       },
     );
+  }
+
+  // Navigate back to the main screen
+  void _navigateBackToMain() {
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   Future<void> _checkAndRequestPermissions() async {
@@ -119,8 +121,8 @@ class _VideoListScreenState extends State<VideoListScreen> {
 
   void _showPermissionDeniedMessage() {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Storage permission is required to access videos.'),
+      const SnackBar(
+        content: Text('Storage permission is required to access videos.'),
         backgroundColor: Colors.redAccent,
       ),
     );
@@ -233,10 +235,8 @@ class _VideoListScreenState extends State<VideoListScreen> {
           ),
         ),
         child: Column(
-          mainAxisAlignment:
-              MainAxisAlignment.center, // Center contents vertically
-          crossAxisAlignment:
-              CrossAxisAlignment.center, // Center contents horizontally
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Padding(
               padding: const EdgeInsets.all(16.0),
@@ -254,12 +254,11 @@ class _VideoListScreenState extends State<VideoListScreen> {
                     ),
                   ],
                 ),
-                textAlign: TextAlign.center, // Center the text
+                textAlign: TextAlign.center,
               ),
             ),
             Expanded(
               child: Center(
-                // Center video player
                 child: _videoPlayerController != null &&
                         _videoPlayerController!.value.isInitialized
                     ? AspectRatio(
@@ -274,5 +273,4 @@ class _VideoListScreenState extends State<VideoListScreen> {
       ),
     );
   }
-
 }
